@@ -44,7 +44,7 @@ export interface StreamResponse {
     data: string;
 }
 
-export interface StreamResponseTyped<T> {
+export interface StreamResponseTyped<T = any> {
     event: string;
     data: T;
 }
@@ -106,7 +106,7 @@ export default class FlowiseClient {
 
     async createPredictionStream<T = any>(
         data: PredictionData
-    ): Promise<PredictionResponseStream<T>> {
+    ): Promise<PredictionResponseStream<StreamResponseTyped<T>>> {
         const { chatflowId, streaming } = data;
 
         const predictionUrl = `${this.baseUrl}/api/v1/prediction/${chatflowId}`;
@@ -122,7 +122,7 @@ export default class FlowiseClient {
             options.headers['Authorization'] = `Bearer ${this.apiKey}`;
         }
 
-        return new Promise<PredictionResponseStream<T>>(
+        return new Promise<PredictionResponseStream<StreamResponseTyped<T>>>(
             async (resolve, reject) => {
                 try {
                     // Check if chatflow is available to stream
@@ -159,7 +159,7 @@ export default class FlowiseClient {
                         const reader = response.body.getReader();
                         const decoder = new TextDecoder();
                         let buffer = '';
-
+                        let stack = '';
                         try {
                             while (true) {
                                 const { done, value } = await reader.read();
@@ -179,8 +179,12 @@ export default class FlowiseClient {
                                             ''
                                         );
                                         const event =
-                                            JSON.parse(stringifiedJson) as T;
-                                        yield event;
+                                            JSON.parse(stringifiedJson);
+                                        if (event.event == 'token')
+                                            stack += event.data as string
+                                        if (event.event == 'metadata')
+                                            event.data.text = stack
+                                        yield event as StreamResponseTyped<T>;
                                     }
                                 }
                             }
@@ -191,7 +195,7 @@ export default class FlowiseClient {
                         }
                     },
                 };
-                resolve(a as unknown as PredictionResponseStream<T>);
+                resolve(a as unknown as PredictionResponseStream<StreamResponseTyped<T>>);
             }
         );
     }
