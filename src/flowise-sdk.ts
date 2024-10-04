@@ -49,9 +49,8 @@ interface FlowiseClientOptions {
     apiKey?: string;
 }
 
-type PredictionResponse<T extends PredictionData> = T['streaming'] extends true
-    ? AsyncGenerator<StreamResponse, void, unknown> // Streaming returns an async generator
-    : Record<string, any>;
+type PredictionResponseRequest = Record<string, any>;
+type PredictionResponseStream = AsyncGenerator<StreamResponse, void, unknown>
 
 export default class FlowiseClient {
     private baseUrl: string;
@@ -63,23 +62,11 @@ export default class FlowiseClient {
     }
 
     // Method to create a new prediction and handle streaming response
-    async createPrediction<T extends PredictionData>(
-        data: T
-    ): Promise<PredictionResponse<T>> {
-        const { chatflowId, streaming } = data;
+    async createPredictionRequest(
+        data: PredictionData
+    ): Promise<PredictionResponseRequest> {
+        const { chatflowId } = data;
 
-        // Check if chatflow is available to stream
-        const chatFlowStreamingUrl = `${this.baseUrl}/api/v1/chatflows-streaming/${chatflowId}`;
-        const resp = await fetch(chatFlowStreamingUrl, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-
-        const chatFlowStreamingData = await resp.json();
-        const isChatFlowAvailableToStream =
-            chatFlowStreamingData.isStreaming || false;
 
         const predictionUrl = `${this.baseUrl}/api/v1/prediction/${chatflowId}`;
 
@@ -94,8 +81,69 @@ export default class FlowiseClient {
             options.headers['Authorization'] = `Bearer ${this.apiKey}`;
         }
 
-        if (isChatFlowAvailableToStream && streaming) {
-            return {
+        return new Promise<PredictionResponseRequest>((resolve, reject) => {
+            try {
+                fetch(predictionUrl, options)
+                    .then(response => {
+                        if (response.ok)
+                            return response.json()
+                        reject(new Error('Error creating prediction'))
+                    })
+                    .then(data => {
+                        resolve(data as PredictionResponseRequest)
+                    }).catch(e => {
+                        reject(e)
+                    })
+            } catch (error) {
+                reject(new Error('Error creating prediction'))
+            }
+        })
+
+    }
+
+    async createPredictionStream(
+        data: PredictionData
+    ): Promise<PredictionResponseStream> {
+        const { chatflowId, streaming } = data;
+
+
+        const predictionUrl = `${this.baseUrl}/api/v1/prediction/${chatflowId}`;
+
+        const options: any = {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        };
+        if (this.apiKey) {
+            options.headers['Authorization'] = `Bearer ${this.apiKey}`;
+        }
+
+        return new Promise<PredictionResponseStream>(async (resolve, reject) => {
+
+            try {
+                // Check if chatflow is available to stream
+                const chatFlowStreamingUrl = `${this.baseUrl}/api/v1/chatflows-streaming/${chatflowId}`;
+                const resp = await fetch(chatFlowStreamingUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                const chatFlowStreamingData = await resp.json();
+                const isChatFlowAvailableToStream =
+                    chatFlowStreamingData.isStreaming || false;
+                if (!isChatFlowAvailableToStream) {
+                    reject(new Error("Flow is not streamable"))
+                    return;
+                }
+            } catch (error) {
+                reject(error)
+                return;
+            }
+
+            const a = {
                 async *[Symbol.asyncIterator]() {
                     const response = await fetch(predictionUrl, options);
 
@@ -131,19 +179,17 @@ export default class FlowiseClient {
                                 }
                             }
                         }
-                    } finally {
+                    } catch(error){
+                        throw error
+                    }
+                    finally {
                         reader.releaseLock();
                     }
                 },
-            } as unknown as Promise<PredictionResponse<T>>;
-        } else {
-            try {
-                const response = await fetch(predictionUrl, options);
-                const resp = await response.json();
-                return resp as Promise<PredictionResponse<T>>;
-            } catch (error) {
-                throw new Error('Error creating prediction');
-            }
-        }
+            };
+            resolve(a as unknown as PredictionResponseStream)
+
+
+        })
     }
 }
