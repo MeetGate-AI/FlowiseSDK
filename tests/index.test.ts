@@ -19,9 +19,17 @@ describe('FlowiseClient', () => {
         const stream = new ReadableStream({
             start(controller) {
                 controller.enqueue(new TextEncoder().encode('message:\n'));
-                controller.enqueue(new TextEncoder().encode('data:{"event":"token","data":"ol"}\n'));
+                controller.enqueue(
+                    new TextEncoder().encode(
+                        'data:{"event":"token","data":"ol"}\n'
+                    )
+                );
                 controller.enqueue(new TextEncoder().encode('message:\n'));
-                controller.enqueue(new TextEncoder().encode('data:{"event":"token","data":"abilir"}\n'));
+                controller.enqueue(
+                    new TextEncoder().encode(
+                        'data:{"event":"token","data":"abilir"}\n'
+                    )
+                );
                 controller.close();
             },
         });
@@ -31,7 +39,9 @@ describe('FlowiseClient', () => {
             body: stream,
         });
 
-        const client = new FlowiseClient({baseUrl:"https://flowise.stb.meetgate.ai"});
+        const client = new FlowiseClient({
+            baseUrl: 'https://flowise.stb.meetgate.ai',
+        });
         const result = await client.createPredictionStream({
             chatflowId: 'c4f413b6-640b-41e7-84e2-855bc6567fc1',
             question: 'What is the revenue of Apple?',
@@ -43,7 +53,10 @@ describe('FlowiseClient', () => {
             chunks.push(chunk);
         }
 
-        expect(chunks).toEqual([{"event":"token","data":"ol"}, {"event":"token","data":"abilir"}]);
+        expect(chunks).toEqual([
+            { event: 'token', data: 'ol' },
+            { event: 'token', data: 'abilir' },
+        ]);
         expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
@@ -56,7 +69,9 @@ describe('FlowiseClient', () => {
             json: async () => mockJsonResponse,
         });
 
-        const client = new FlowiseClient({baseUrl:"https://flowise.stb.meetgate.ai"});
+        const client = new FlowiseClient({
+            baseUrl: 'https://flowise.stb.meetgate.ai',
+        });
         const result = await client.createPredictionRequest({
             chatflowId: 'c4f413b6-640b-41e7-84e2-855bc6567fc1',
             question: 'What is the revenue of Apple?',
@@ -76,7 +91,9 @@ describe('FlowiseClient', () => {
             json: async () => mockJsonResponse,
         });
 
-        const client = new FlowiseClient({baseUrl:"https://flowise.stb.meetgate.ai"});
+        const client = new FlowiseClient({
+            baseUrl: 'https://flowise.stb.meetgate.ai',
+        });
         const result = await client.createPredictionRequest({
             chatflowId: 'c4f413b6-640b-41e7-84e2-855bc6567fc1',
             question: 'What is the revenue of Apple?',
@@ -93,7 +110,9 @@ describe('FlowiseClient', () => {
             status: 500,
         });
 
-        const client = new FlowiseClient({baseUrl:"https://flowise.stb.meetgate.ai"});
+        const client = new FlowiseClient({
+            baseUrl: 'https://flowise.stb.meetgate.ai',
+        });
 
         await expect(
             client.createPredictionRequest({

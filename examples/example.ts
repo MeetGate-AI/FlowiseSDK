@@ -6,10 +6,9 @@ async function main() {
     const flowise = new FlowiseClient({ baseUrl: 'http://localhost:3000' });
 
     try {
-        const completion = await flowise.createPrediction({
+        const completion = await flowise.createPredictionStream({
             chatflowId: 'fe1145fa-1b2b-45b7-b2ba-bcc5aaeb5ffd',
-            question: 'hello there',
-            streaming: true,
+            question: 'hello there'
         });
 
         // Process each chunk of data as it is streamed

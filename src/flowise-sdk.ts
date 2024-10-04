@@ -6,8 +6,8 @@ export interface PredictionData {
     streaming?: boolean;
     history?: IMessage[];
     uploads?: IFileUpload[];
-    leadEmail?: string
-    action?: IAction
+    leadEmail?: string;
+    action?: IAction;
 }
 
 interface IAction {
@@ -44,13 +44,18 @@ export interface StreamResponse {
     data: string;
 }
 
+export interface StreamResponseTyped<T> {
+    event: string;
+    data: T;
+}
+
 interface FlowiseClientOptions {
     baseUrl?: string;
     apiKey?: string;
 }
 
 type PredictionResponseRequest = Record<string, any>;
-type PredictionResponseStream = AsyncGenerator<StreamResponse, void, unknown>
+type PredictionResponseStream<T> = AsyncGenerator<T, void, unknown>;
 
 export default class FlowiseClient {
     private baseUrl: string;
@@ -66,7 +71,6 @@ export default class FlowiseClient {
         data: PredictionData
     ): Promise<PredictionResponseRequest> {
         const { chatflowId } = data;
-
 
         const predictionUrl = `${this.baseUrl}/api/v1/prediction/${chatflowId}`;
 
@@ -84,28 +88,26 @@ export default class FlowiseClient {
         return new Promise<PredictionResponseRequest>((resolve, reject) => {
             try {
                 fetch(predictionUrl, options)
-                    .then(response => {
-                        if (response.ok)
-                            return response.json()
-                        reject(new Error('Error creating prediction'))
+                    .then((response) => {
+                        if (response.ok) return response.json();
+                        reject(new Error('Error creating prediction'));
                     })
-                    .then(data => {
-                        resolve(data as PredictionResponseRequest)
-                    }).catch(e => {
-                        reject(e)
+                    .then((data) => {
+                        resolve(data as PredictionResponseRequest);
                     })
+                    .catch((e) => {
+                        reject(e);
+                    });
             } catch (error) {
-                reject(new Error('Error creating prediction'))
+                reject(new Error('Error creating prediction'));
             }
-        })
-
+        });
     }
 
-    async createPredictionStream(
+    async createPredictionStream<T = any>(
         data: PredictionData
-    ): Promise<PredictionResponseStream> {
+    ): Promise<PredictionResponseStream<T>> {
         const { chatflowId, streaming } = data;
-
 
         const predictionUrl = `${this.baseUrl}/api/v1/prediction/${chatflowId}`;
 
@@ -120,76 +122,77 @@ export default class FlowiseClient {
             options.headers['Authorization'] = `Bearer ${this.apiKey}`;
         }
 
-        return new Promise<PredictionResponseStream>(async (resolve, reject) => {
-
-            try {
-                // Check if chatflow is available to stream
-                const chatFlowStreamingUrl = `${this.baseUrl}/api/v1/chatflows-streaming/${chatflowId}`;
-                const resp = await fetch(chatFlowStreamingUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                });
-                const chatFlowStreamingData = await resp.json();
-                const isChatFlowAvailableToStream =
-                    chatFlowStreamingData.isStreaming || false;
-                if (!isChatFlowAvailableToStream) {
-                    reject(new Error("Flow is not streamable"))
+        return new Promise<PredictionResponseStream<T>>(
+            async (resolve, reject) => {
+                try {
+                    // Check if chatflow is available to stream
+                    const chatFlowStreamingUrl = `${this.baseUrl}/api/v1/chatflows-streaming/${chatflowId}`;
+                    const resp = await fetch(chatFlowStreamingUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                    });
+                    const chatFlowStreamingData = await resp.json();
+                    const isChatFlowAvailableToStream =
+                        chatFlowStreamingData.isStreaming || false;
+                    if (!isChatFlowAvailableToStream) {
+                        reject(new Error('Flow is not streamable'));
+                        return;
+                    }
+                } catch (error) {
+                    reject(error);
                     return;
                 }
-            } catch (error) {
-                reject(error)
-                return;
-            }
 
-            const a = {
-                async *[Symbol.asyncIterator]() {
-                    const response = await fetch(predictionUrl, options);
+                const a = {
+                    async *[Symbol.asyncIterator]() {
+                        const response = await fetch(predictionUrl, options);
 
-                    if (!response.ok) {
-                        throw new Error(
-                            `HTTP error! status: ${response.status}`
-                        );
-                    }
+                        if (!response.ok) {
+                            throw new Error(
+                                `HTTP error! status: ${response.status}`
+                            );
+                        }
 
-                    //@ts-ignore
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let buffer = '';
+                        //@ts-ignore
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
 
-                    try {
-                        while (true) {
-                            const { done, value } = await reader.read();
-                            if (done) break;
+                        try {
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done) break;
 
-                            buffer += decoder.decode(value, { stream: true });
-                            const lines = buffer.split('\n');
-                            buffer = lines.pop() || '';
+                                buffer += decoder.decode(value, {
+                                    stream: true,
+                                });
+                                const lines = buffer.split('\n');
+                                buffer = lines.pop() || '';
 
-                            for (const line of lines) {
-                                if (line.trim() === '') continue;
-                                if (line.startsWith('data:')) {
-                                    const stringifiedJson = line.replace(
-                                        'data:',
-                                        ''
-                                    );
-                                    const event = JSON.parse(stringifiedJson);
-                                    yield event;
+                                for (const line of lines) {
+                                    if (line.trim() === '') continue;
+                                    if (line.startsWith('data:')) {
+                                        const stringifiedJson = line.replace(
+                                            'data:',
+                                            ''
+                                        );
+                                        const event =
+                                            JSON.parse(stringifiedJson) as T;
+                                        yield event;
+                                    }
                                 }
                             }
+                        } catch (error) {
+                            throw error;
+                        } finally {
+                            reader.releaseLock();
                         }
-                    } catch(error){
-                        throw error
-                    }
-                    finally {
-                        reader.releaseLock();
-                    }
-                },
-            };
-            resolve(a as unknown as PredictionResponseStream)
-
-
-        })
+                    },
+                };
+                resolve(a as unknown as PredictionResponseStream<T>);
+            }
+        );
     }
 }
